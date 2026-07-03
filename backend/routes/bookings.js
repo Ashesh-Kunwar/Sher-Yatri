@@ -5,6 +5,7 @@ import {
   getBookingById,
   updateBooking,
   recordPayment,
+  generateInvoice,
 } from "../controllers/bookingController.js";
 import { protect, adminOnly } from "../middleware/auth.js";
 
@@ -18,5 +19,6 @@ router.get("/", protect, adminOnly, getBookings);
 router.get("/:id", protect, adminOnly, getBookingById);
 router.put("/:id", protect, adminOnly, updateBooking);
 router.post("/:id/payments", protect, adminOnly, recordPayment);
+router.get("/:id/invoice", protect, adminOnly, generateInvoice);
 
 export default router;

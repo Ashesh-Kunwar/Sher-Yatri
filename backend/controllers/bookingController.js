@@ -1,6 +1,8 @@
 import Booking from "../models/Booking.js";
 import Customer from "../models/Customer.js";
 import Tour from "../models/Tour.js";
+import Company from "../models/Company.js";
+import PDFDocument from 'pdfkit';
 
 // POST /api/bookings  (public - creates an inquiry/booking from the website form)
 export const createBooking = async (req, res) => {
@@ -121,5 +123,79 @@ export const recordPayment = async (req, res) => {
     res.json(booking);
   } catch (err) {
     res.status(400).json({ message: "Failed to record payment", error: err.message });
+  }
+};
+
+// GET /api/bookings/:id/invoice  (admin - generate PDF invoice, only for completed + fully paid bookings)
+export const generateInvoice = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id)
+      .populate('customer')
+      .populate('tour');
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    if (booking.status !== 'completed' || booking.paymentStatus !== 'paid') {
+      return res.status(400).json({
+        message: 'Invoice can only be generated once the booking is completed and fully paid.',
+      });
+    }
+
+    const company = await Company.findOne();
+
+    const doc = new PDFDocument({ margin: 50 });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=invoice-${booking._id}.pdf`
+    );
+
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(20).text(company?.name || 'Sher Yatri', { align: 'left' });
+    if (company?.tagline) {
+      doc.fontSize(10).text(company.tagline);
+    }
+    doc.moveDown();
+    doc.fontSize(16).text('INVOICE', { align: 'right' });
+    doc.fontSize(10).text(`Invoice #: ${booking._id}`, { align: 'right' });
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, { align: 'right' });
+    doc.moveDown(2);
+
+    // Customer info
+    doc.fontSize(12).text('Billed To:', { underline: true });
+    doc.fontSize(10).text(booking.customer?.name || 'N/A');
+    doc.text(booking.customer?.email || '');
+    doc.text(booking.customer?.phone || '');
+    doc.moveDown();
+
+    // Tour info
+    doc.fontSize(12).text('Tour Details:', { underline: true });
+    doc.fontSize(10).text(`Package: ${booking.tour?.title || 'N/A'}`);
+    doc.text(`Duration: ${booking.tour?.durationDays || '-'} days`);
+    doc.moveDown();
+
+    // Payment table
+    doc.fontSize(12).text('Payment Summary:', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10);
+    doc.text(`Total Price: NPR ${booking.totalPrice?.toLocaleString() || 0}`);
+    doc.text(`Amount Paid: NPR ${booking.amountPaid?.toLocaleString() || 0}`);
+    doc.text(
+      `Balance Due: NPR ${((booking.totalPrice || 0) - (booking.amountPaid || 0)).toLocaleString()}`
+    );
+    doc.text(`Payment Status: ${booking.paymentStatus?.toUpperCase() || 'UNPAID'}`);
+    doc.moveDown(2);
+
+    doc.fontSize(9).text('Thank you for booking with us!', { align: 'center' });
+
+    doc.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to generate invoice' });
   }
 };

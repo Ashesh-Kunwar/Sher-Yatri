@@ -14,6 +14,7 @@ export default function BookingDetail() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [savingStatus, setSavingStatus] = useState(false);
   const [savingPayment, setSavingPayment] = useState(false);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
   const load = () => {
     api.getBooking(id)
@@ -62,13 +63,55 @@ export default function BookingDetail() {
     }
   };
 
+  const handleDownloadInvoice = async () => {
+    setDownloadingInvoice(true);
+    try {
+      const token = localStorage.getItem("sy_token");
+      const baseUrl = import.meta.env.VITE_API_URL;
+
+      const response = await fetch(`${baseUrl}/bookings/${id}/invoice`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to generate invoice");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `invoice-${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  };
+
   if (error) return <Layout><div className="error-box">{error}</div></Layout>;
   if (!booking) return <Layout><p>Loading...</p></Layout>;
+
+  const invoiceEligible = booking.status === "completed" && booking.paymentStatus === "paid";
 
   return (
     <Layout>
       <Link to="/bookings" className="back-link">&larr; Back to Bookings</Link>
-      <h1>Booking Detail</h1>
+      <div className="page-header">
+        <h1>Booking Detail</h1>
+        {invoiceEligible && (
+          <button className="btn-secondary" onClick={handleDownloadInvoice} disabled={downloadingInvoice}>
+            {downloadingInvoice ? "Generating..." : "Download Invoice"}
+          </button>
+        )}
+      </div>
 
       <div className="detail-grid">
         <div className="detail-card">
